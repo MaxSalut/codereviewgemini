@@ -1,123 +1,101 @@
-# Рецензент — автоматичне рев'ю коду лабораторних на основі Google Gemini API
+Рецензент
 
-Лабораторна робота №2 з дисципліни «Хмарні обчислення».
-КНУ імені Тараса Шевченка, факультет комп'ютерних наук та кібернетики, кафедра теоретичної кібернетики.
-Виконав: Безверхий Максим Вікторович, група ТК-42. Викладач: Деревянченко Олександр Валерійович.
+Вебсервіс для автоматичного рев'ю коду лабораторних робіт на основі Google Gemini API. Лабораторна робота №2 з дисципліни «Хмарні обчислення», КНУ імені Тараса Шевченка, факультет комп'ютерних наук та кібернетики, кафедра теоретичної кібернетики.
 
-Користувач вставляє код або завантажує файл, обирає мову — сервіс надсилає код у **Google Gemini API** і отримує
-**структурований JSON**: список проблем (рядок, тип, опис, як виправити), загальну оцінку 0–100 і виправлену
-версію коду. Результат показується як звіт із зауваженнями «на полях» коду. Історія перевірок зберігається в
-**Supabase**, сервіс розгорнуто на **Render**.
+Виконав Безверхий Максим Вікторович, група ТК-42. Викладач Деревянченко Олександр Валерійович.
 
-## Хмарні моделі в проєкті
 
-| Модель | Сервіс | Що робить у проєкті |
-|---|---|---|
-| AIaaS | Google Gemini API (`gemini-3.8-flash`, `gemini-3.5-flash-lite`) | аналіз коду, structured output за JSON-схемою |
-| DBaaS | Supabase (PostgreSQL) | таблиця `reviews` з історією перевірок |
-| PaaS | Render (Free web service) | запуск Flask + Gunicorn, публічне HTTPS-посилання |
-| SaaS | GitHub, Google AI Studio | зберігання коду, автодеплой; керування ключами |
-| IaaS | — (не використовується: ми не орендуємо віртуальні машини і GPU) | |
+Що робить сервіс
 
-## Архітектура
+Користувач вставляє код або завантажує файл. Сервер надсилає код у Gemini API і отримує JSON за заданою схемою: зауваження з номером рядка, типом і порадою, оцінку від 0 до 100 і виправлений код. Інтерфейс показує зауваження поруч із рядками коду, а сервер зберігає кожну перевірку в Supabase.
 
-```
-Браузер (HTML/CSS/JS)  ──HTTPS──▶  Flask на Render (PaaS)  ──▶  Google Gemini API (AIaaS)
-                                         │
-                                         └──REST──▶  Supabase PostgreSQL (DBaaS)
-```
 
-* Ключі API — тільки в змінних середовища (`.env` локально, **Environment** на Render), у браузер вони не потрапляють.
-* Відповідь Gemini отримується через `response_mime_type="application/json"` + `response_schema` (Pydantic-модель `ReviewResult`).
-* Надійність: таймаут кожної спроби (55 с), до 2 повторів при 429/5xx/таймауті, перевірка вводу, ліміт 8 перевірок/хв з однієї IP.
-* Резервна модель: якщо Flash перевантажена на боці Google (503/504/429), звіт автоматично робить Flash-Lite, а інтерфейс про це попереджає. Після збою Flash 2 хв не викликається, щоб не змушувати користувача чекати. У режимі «Порівняти дві моделі» та в `benchmark.py` резерв вимкнено.
-* Якщо Supabase не налаштовано — історія пишеться в локальний SQLite (`data/history.db`). Це резервний режим для запуску на ноутбуці.
-* Вартість запиту рахується з `usage_metadata` (вхідні, вихідні та thinking-токени) за тарифами платного рівня.
+Хмарні сервіси
 
-## Структура
+AIaaS: Google Gemini API, моделі gemini-3.8-flash і gemini-3.5-flash-lite.
 
-```
-app.py                 Flask: сторінки та API (/api/review, /api/compare, /api/history, /api/health)
-reviewer/config.py     налаштування, моделі та ціни
-reviewer/gemini_client.py  виклик Gemini, structured output, повтори, оцінка вартості
-reviewer/schemas.py    JSON-схема відповіді (Pydantic)
-reviewer/storage.py    Supabase REST або SQLite, статистика
-reviewer/validation.py перевірка коду і файлів
-reviewer/examples.py   4 демо-приклади
-templates/, static/    інтерфейс українською (адаптивний)
-supabase/schema.sql    SQL для створення таблиці
-scripts/benchmark.py   заміри часу і вартості (Flash vs Flash-Lite)
-tests/                 автотести (pytest, без реального API)
-render.yaml            налаштування деплою на Render
-run_local.bat          запуск на Windows одним кліком
-```
+DBaaS: Supabase (PostgreSQL), таблиця reviews з історією перевірок.
 
-## Запуск локально (Windows)
+PaaS: Render, безкоштовний вебсервіс з Flask і Gunicorn.
 
-1. Встановіть Python 3.12+ з https://www.python.org/downloads/ (галочка **Add python.exe to PATH**).
-2. Двічі клацніть `run_local.bat`. Перший запуск створить `.env` і відкриє його в Блокноті.
-3. Вставте `GEMINI_API_KEY` (і за бажанням `SUPABASE_URL`, `SUPABASE_SECRET_KEY`), збережіть, запустіть `run_local.bat` ще раз.
-4. Відкриється http://127.0.0.1:5000
+SaaS: GitHub зберігає код, Google AI Studio видає ключ API.
 
-Вручну (будь-яка ОС):
+IaaS проєкт не використовує, бо не орендує віртуальні машини чи GPU.
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-copy .env.example .env          # macOS/Linux: cp .env.example .env  — і заповніть ключі
-python app.py
-```
 
-Тести: `pip install pytest` → `python -m pytest -q`.
-Заміри: `python scripts/benchmark.py --runs 2` → таблиця в консолі та `benchmark_results.csv`.
+Надійність
 
-## База даних Supabase
+Сервер обмежує кожну спробу 55 секундами і повторює запит до 2 разів при помилках 429, 5xx або таймауті. Якщо Gemini 3.8 Flash перевантажена, звіт робить Flash-Lite, і інтерфейс про це повідомляє. З однієї IP-адреси сервер приймає до 8 перевірок за хвилину. Ключі API сервер читає зі змінних середовища, у браузер вони не потрапляють.
 
-Supabase → **SQL Editor** → вставити `supabase/schema.sql` → **Run**. У `.env` / Render додати:
 
-```
-SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_SECRET_KEY=sb_secret_...
-```
+Структура
 
-RLS увімкнено без політик: публічний ключ таблицю не бачить, сервер працює із секретним ключем.
+app.py: сторінки і API (/api/review, /api/compare, /api/history, /api/health).
 
-## Деплой на Render
+reviewer/gemini_client.py: виклик Gemini, повтори, резервна модель, підрахунок вартості.
 
-1. Завантажте проєкт у репозиторій GitHub (без файлу `.env`).
-2. Render → **New** → **Web Service** → підключіть репозиторій.
-3. Runtime **Python 3**, Build `pip install -r requirements.txt`,
-   Start `gunicorn app:app --workers 2 --threads 4 --timeout 150 --bind 0.0.0.0:$PORT`, Instance type **Free**.
-4. **Environment**: `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `PYTHON_VERSION=3.12.8`.
-5. Після кожного `git push` / завантаження файлів Render перезбирає сервіс автоматично.
+reviewer/schemas.py: схема відповіді Gemini (Pydantic).
 
-Альтернатива — **New → Blueprint**: Render прочитає `render.yaml` і попросить лише значення ключів.
+reviewer/storage.py: історія в Supabase або в локальному SQLite.
 
-Обмеження безкоштовного Render: сервіс «засинає» після 15 хв без запитів, перше відкриття — до хвилини.
+supabase/schema.sql: SQL для таблиці і представлення статистики.
 
-## Змінні середовища
+scripts/benchmark.py: заміри часу, токенів і ціни.
 
-| Змінна | За замовчуванням | Опис |
-|---|---|---|
-| `GEMINI_API_KEY` | — | ключ з https://aistudio.google.com/apikey |
-| `GEMINI_MODEL` | `gemini-3.8-flash` | модель за замовчуванням |
-| `GEMINI_THINKING_LEVEL` | `low` | рівень «роздумів»: `low`, `medium`, `high` |
-| `GEMINI_TIMEOUT_SECONDS` | `55` | таймаут однієї спроби |
-| `GEMINI_MAX_RETRIES` | `2` | кількість повторів |
-| `GEMINI_FALLBACK_MODEL` | `gemini-3.5-flash-lite` | резервна модель при перевантаженні основної (порожнє значення вимикає) |
-| `GEMINI_PRIMARY_BUDGET_SECONDS` | `60` | скільки чекати основну модель, перш ніж перейти на резервну |
-| `GEMINI_MODEL_COOLDOWN_SECONDS` | `120` | скільки не викликати перевантажену модель |
-| `ENABLE_PRO_MODEL` | `false` | показати `gemini-3.1-pro-preview` (лише платний рівень) |
-| `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | — | доступ до бази; без них — SQLite |
+tests/test_app.py: 19 автотестів без реальних викликів API.
 
-## Вартість (платний рівень, листопад 2026)
 
-| Модель | Вхід, $/1 млн токенів | Вихід, $/1 млн | Безкоштовний рівень |
-|---|---|---|---|
-| gemini-3.8-flash | 0.75 (з 2027 — 1.50) | 3.75 (з 2027 — 7.50) | так |
-| gemini-3.5-flash-lite | 0.30 | 2.50 | так |
-| gemini-3.1-pro-preview | 2.00 | 12.00 | ні |
+Запуск на Windows
 
-Типова перевірка (~1 200 вхідних і ~1 800 вихідних токенів) на Flash коштувала б близько $0.008, тобто ≈ $8 за 1000 перевірок.
-У проєкті використовується лише безкоштовний рівень, тому фактично — $0.
+1. Встановіть Python 3.12 або новіший з python.org і поставте галочку Add python.exe to PATH.
+2. Запустіть run_local.bat. Перший запуск створить файл .env і відкриє його в Блокноті.
+3. Впишіть GEMINI_API_KEY з aistudio.google.com/apikey. Для історії в хмарі впишіть SUPABASE_URL і SUPABASE_SECRET_KEY.
+4. Збережіть файл і запустіть run_local.bat ще раз. Браузер відкриє http://127.0.0.1:5000.
+
+Без даних Supabase сервер пише історію у файл data/history.db.
+
+Тести: python -m pytest -q
+
+Заміри: python scripts/benchmark.py --runs 2
+
+
+База даних Supabase
+
+Відкрийте SQL Editor, вставте вміст supabase/schema.sql і натисніть Run. Скрипт створює таблицю reviews, вмикає RLS і дає доступ лише секретному ключу sb_secret. Запит із публічним ключем Supabase відхиляє з кодом 401.
+
+
+Деплой на Render
+
+1. На Render оберіть New, потім Blueprint, і підключіть цей репозиторій. Render прочитає render.yaml.
+2. Впишіть значення GEMINI_API_KEY, SUPABASE_URL і SUPABASE_SECRET_KEY.
+3. Після кожного git push Render збирає і запускає сервіс заново.
+
+На безкоштовному плані Render зупиняє сервіс після 15 хвилин без запитів, і перше відкриття після паузи триває до хвилини.
+
+
+Додаткові змінні середовища
+
+GEMINI_MODEL: основна модель, за замовчуванням gemini-3.8-flash.
+
+GEMINI_FALLBACK_MODEL: резервна модель, за замовчуванням gemini-3.5-flash-lite. Порожнє значення вимикає резерв.
+
+GEMINI_THINKING_LEVEL: low, medium або high, за замовчуванням low.
+
+GEMINI_TIMEOUT_SECONDS і GEMINI_MAX_RETRIES: таймаут спроби (55) і кількість повторів (2).
+
+ENABLE_PRO_MODEL=true: показує gemini-3.1-pro-preview, яка працює лише на платному рівні.
+
+
+Вартість
+
+Ціни платного рівня Gemini API за 1 млн токенів, перевірені 14.11.2026 в документації Google:
+
+gemini-3.8-flash: вхід $0.75, вихід $3.75 до 31.12.2026, з 1.01.2027 вхід $1.50, вихід $7.50.
+
+gemini-3.5-flash-lite: вхід $0.30, вихід $2.50.
+
+gemini-3.1-pro-preview: вхід $2.00, вихід $12.00, безкоштовного рівня немає.
+
+Thinking-токени Google рахує за ціною вихідних.
+
+Замір на 4 демо-прикладах (по 2 запуски): Flash-Lite відповідає в середньому за 3,3 с, використовує 644 вхідні і 962 вихідні токени, перевірка коштує $0.0026, а 1000 перевірок коштують $2.60. Проєкт працює на безкоштовному рівні, тому фактично платить $0.
