@@ -204,8 +204,9 @@ def test_api_review_reports_fallback(client, monkeypatch):
     _fake_gemini(monkeypatch, {"gemini-3.8-flash"})
     r = client.post("/api/review", json={"code": "print('hello world')", "model": "gemini-3.8-flash"})
     meta = r.get_json()["meta"]
-    assert r.status_code == 200 and meta["model"] == "gemini-3.5-flash-lite"
+    assert r.status_code == 200 and meta["model"] == "gemini-3.6-flash"
     assert meta["fallback_from"] == "gemini-3.8-flash" and meta["fallback_from_label"] == "Gemini 3.8 Flash"
+    assert meta["fallback_reason"] == "unavailable"
     # У режимі порівняння резерв не вмикається: Flash показує помилку, Flash-Lite — результат.
     r = client.post("/api/compare", json={"code": "print('hello world')"})
     res = r.get_json()["results"]
@@ -254,3 +255,37 @@ def test_daily_quota_no_retry_and_fast_fail(monkeypatch):
     with pytest.raises(gc.ReviewError) as e:
         gc.review_code("print(1)", "Python", "gemini-3.8-flash")
     assert e.value.code == "daily_quota" and calls == []
+
+
+def test_fallback_chain_reaches_last_model(monkeypatch):
+    """3.8 Flash перевантажена, 3.6 Flash вимкнена (404): звіт робить Flash-Lite."""
+    from reviewer import config
+    from google.genai import errors
+    gc, calls = _fake_gemini(monkeypatch, set())  # скидає паузи моделей і дає список викликів
+
+    class Resp:
+        parsed = None
+        text = '{"detected_language":"Python","score":80,"summary":"ok","strengths":[],"issues":[],"corrected_code":"x"}'
+        usage_metadata = type("U", (), {"prompt_token_count": 10, "candidates_token_count": 5, "thoughts_token_count": 0})()
+
+    class Models:
+        def generate_content(self, model, **kw):
+            calls.append(model)
+            if model == "gemini-3.8-flash":
+                raise errors.ServerError(503, {"error": {"code": 503, "message": "high demand", "status": "UNAVAILABLE"}})
+            if model == "gemini-3.6-flash":
+                raise errors.ClientError(404, {"error": {"code": 404, "message": "model not found", "status": "NOT_FOUND"}})
+            return Resp()
+
+    monkeypatch.setattr(gc, "get_client", lambda: type("C", (), {"models": Models()})())
+    out = gc.review_code("print(1)", "Python", "gemini-3.8-flash", fallback=config.FALLBACK_MODELS)
+    assert out.model == "gemini-3.5-flash-lite" and out.fallback_from == "gemini-3.8-flash"
+    assert out.fallback_reason == "unavailable"
+    assert calls == ["gemini-3.8-flash"] * 3 + ["gemini-3.6-flash", "gemini-3.5-flash-lite"]
+
+
+def test_fallback_only_model_hidden_from_ui(client):
+    ids = [m["id"] for m in client.get("/api/config").get_json()["models"]]
+    assert "gemini-3.6-flash" not in ids and ids[:2] == ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
+    r = client.post("/api/review", json={"code": "print('hello world')", "model": "gemini-3.6-flash"})
+    assert r.status_code == 400

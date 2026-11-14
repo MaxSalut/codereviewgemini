@@ -29,9 +29,12 @@ THINKING_LEVEL = os.getenv("GEMINI_THINKING_LEVEL", "low").strip() or None
 REQUEST_TIMEOUT_S = _int("GEMINI_TIMEOUT_SECONDS", 55)      # таймаут однієї спроби
 TOTAL_DEADLINE_S = _int("GEMINI_TOTAL_DEADLINE_SECONDS", 110)  # загальний ліміт з повторами
 MAX_RETRIES = _int("GEMINI_MAX_RETRIES", 2)                  # повторні спроби при збоях
-# Резервна модель: якщо основна перевантажена (503/504/429), звіт робить вона. Порожнє значення вимикає.
-FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite").strip() or None
-PRIMARY_BUDGET_S = _int("GEMINI_PRIMARY_BUDGET_SECONDS", 60)  # скільки чекати основну модель, якщо є резервна
+# Резервні моделі по черзі: якщо основна перевантажена (503/504/429), звіт робить наступна.
+# Порожнє значення вимикає резерв. У кожної моделі свій денний ліміт безкоштовного рівня.
+FALLBACK_MODELS = [m.strip() for m in os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3.6-flash,gemini-3.5-flash-lite").split(",")
+                   if m.strip()]
+PRIMARY_BUDGET_S = _int("GEMINI_PRIMARY_BUDGET_SECONDS", 60)  # скільки чекати одну модель, якщо після неї є резерв
+LAST_MODEL_RESERVE_S = 20  # час, який завжди лишаємо останній резервній моделі
 MODEL_COOLDOWN_S = _int("GEMINI_MODEL_COOLDOWN_SECONDS", 120)  # скільки не чіпати перевантажену модель
 DAILY_QUOTA_COOLDOWN_S = _int("GEMINI_DAILY_QUOTA_COOLDOWN_SECONDS", 1800)  # пауза після вичерпання денного ліміту
 ENABLE_PRO = _bool("ENABLE_PRO_MODEL", False)               # Pro немає на безкоштовному рівні
@@ -45,8 +48,18 @@ MODELS = {
         "description": "Основна модель: найкраща якість серед безкоштовних",
         "input_price": 0.75,
         "output_price": 3.75,
-        "price_note": "вступна ціна до 31.12.2026, з 2027 — $1.50 / $7.50",
+        "price_note": "вступна ціна до 31.12.2026, з 2027 року $1.50 / $7.50",
         "free_tier": True,
+    },
+    "gemini-3.6-flash": {
+        "label": "Gemini 3.6 Flash",
+        "short": "Flash 3.6",
+        "description": "Попереднє покоління Flash, резервна модель",
+        "input_price": 0.75,
+        "output_price": 3.75,
+        "price_note": "вступна ціна до 31.12.2026, з 2027 року $1.50 / $7.50",
+        "free_tier": True,
+        "fallback_only": True,  # не показуємо у виборі моделі, використовуємо як резерв
     },
     "gemini-3.5-flash-lite": {
         "label": "Gemini 3.5 Flash-Lite",
@@ -76,7 +89,8 @@ if DEFAULT_MODEL not in MODELS:
 
 
 def available_models() -> dict:
-    return {k: v for k, v in MODELS.items() if v["free_tier"] or ENABLE_PRO or k == DEFAULT_MODEL}
+    return {k: v for k, v in MODELS.items()
+            if (v["free_tier"] and not v.get("fallback_only")) or (ENABLE_PRO and not v["free_tier"]) or k == DEFAULT_MODEL}
 
 
 # --- Supabase (DBaaS) ---

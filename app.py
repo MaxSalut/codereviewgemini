@@ -111,8 +111,8 @@ def _read_request() -> dict:
 
 def _run_review(code: str, language: str, model: str, filename: str | None, allow_fallback: bool = False) -> dict:
     lang_label = config.LANGUAGES.get(language, "auto") if language != "auto" else "auto"
-    if allow_fallback and config.FALLBACK_MODEL:
-        outcome = review_code(code, lang_label, model, fallback=config.FALLBACK_MODEL)
+    if allow_fallback and config.FALLBACK_MODELS:
+        outcome = review_code(code, lang_label, model, fallback=config.FALLBACK_MODELS)
     else:
         outcome = review_code(code, lang_label, model)
     model = outcome.model  # якщо спрацював резерв — показуємо модель, яка реально відповіла

@@ -189,13 +189,14 @@ def _put_in_cooldown(model: str, err: ReviewError) -> None:
 
 
 def review_code(code: str, language_label: str, model: str | None = None,
-                fallback: str | None = None) -> ReviewOutcome:
-    """Рев'ю коду. Якщо задано fallback, а основна модель перевантажена, відповідає резервна модель."""
+                fallback: str | list[str] | tuple[str, ...] | None = None) -> ReviewOutcome:
+    """Рев'ю коду. fallback: резервна модель або список моделей, які по черзі заміняють перевантажену основну."""
     model = model or config.DEFAULT_MODEL
-    if fallback == model:
-        fallback = None
+    if isinstance(fallback, str):
+        fallback = [fallback]
+    chain = [model] + [m for m in dict.fromkeys(fallback or []) if m != model]
     started = time.perf_counter()
-    if not fallback:
+    if len(chain) == 1:
         # Денний ліміт не оновиться за секунди: відповідаємо одразу, не витрачаючи запити.
         err = _in_cooldown(model)
         if err is not None and err.code == "daily_quota":
@@ -206,23 +207,39 @@ def review_code(code: str, language_label: str, model: str | None = None,
             _put_in_cooldown(model, e)
             raise
 
-    reason_err = _in_cooldown(model)
-    if reason_err is not None:
-        log.info("Model %s is in cooldown, using fallback %s", model, fallback)
-    else:
+    reason_err: ReviewError | None = None  # чому не відповіла основна модель
+    for idx, current in enumerate(chain):
+        is_last = idx == len(chain) - 1
+        if not is_last:
+            cooled = _in_cooldown(current)
+            if cooled is not None:
+                log.info("Model %s is in cooldown (%s), trying next model", current, cooled.code)
+                reason_err = reason_err or cooled
+                continue
+            elapsed = time.perf_counter() - started
+            deadline = min(elapsed + config.PRIMARY_BUDGET_S, config.TOTAL_DEADLINE_S - config.LAST_MODEL_RESERVE_S)
+            if deadline - elapsed < MIN_ATTEMPT_S:
+                continue  # часу на цю модель уже не лишилося, переходимо до останньої
+            retries = config.MAX_RETRIES
+        else:
+            deadline, retries = config.TOTAL_DEADLINE_S, 1
         try:
-            return _review_with_model(code, language_label, model, started,
-                                      min(config.PRIMARY_BUDGET_S, config.TOTAL_DEADLINE_S), config.MAX_RETRIES)
+            outcome = _review_with_model(code, language_label, current, started, deadline, retries)
         except ReviewError as err:
-            if err.code not in _FALLBACK_CODES:
+            _put_in_cooldown(current, err)
+            # Основна модель переходить на резерв лише при перевантаженні; проміжна резервна при будь-якому
+            # збої, крім проблем із ключем (наприклад, якщо Google вимкне стару модель).
+            can_skip = err.code in _FALLBACK_CODES if idx == 0 else err.code not in {"bad_key", "not_configured"}
+            if is_last or not can_skip:
                 raise
-            _put_in_cooldown(model, err)
-            reason_err = err
-            log.warning("Model %s failed (%s), switching to fallback %s", model, err.code, fallback)
-    outcome = _review_with_model(code, language_label, fallback, started, config.TOTAL_DEADLINE_S, 1)
-    outcome.fallback_from = model
-    outcome.fallback_reason = reason_err.code
-    return outcome
+            reason_err = reason_err or err
+            log.warning("Model %s failed (%s), trying next model", current, err.code)
+            continue
+        if idx > 0:
+            outcome.fallback_from = model
+            outcome.fallback_reason = reason_err.code if reason_err else "unavailable"
+        return outcome
+    raise reason_err or ReviewError("unavailable", "Gemini тимчасово недоступний. Спробуйте за хвилину.", 503)
 
 
 def _review_with_model(code: str, language_label: str, model: str, started: float,
