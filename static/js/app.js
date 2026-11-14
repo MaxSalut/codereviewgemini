@@ -242,7 +242,9 @@
           animate: true,
           warning: [
             data.meta && data.meta.fallback_from
-              ? `${data.meta.fallback_from_label} зараз перевантажена на боці Google, тому звіт зробила резервна модель ${data.meta.model_label}.`
+              ? (data.meta.fallback_reason === "daily_quota"
+                  ? `Денний ліміт безкоштовного рівня для ${data.meta.fallback_from_label} вичерпано, тому звіт зробила резервна модель ${data.meta.model_label}.`
+                  : `${data.meta.fallback_from_label} зараз перевантажена на боці Google, тому звіт зробила резервна модель ${data.meta.model_label}.`)
               : "",
             data.history_saved === false ? "Звіт не збережено в історію: база даних недоступна." : "",
           ].filter(Boolean).join(" "),

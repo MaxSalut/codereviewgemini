@@ -134,6 +134,7 @@ def _run_review(code: str, language: str, model: str, filename: str | None, allo
             "model": model,
             "model_label": info.get("label", model),
             "fallback_from": outcome.fallback_from,
+            "fallback_reason": outcome.fallback_reason,
             "fallback_from_label": config.MODELS.get(outcome.fallback_from or "", {}).get("label", outcome.fallback_from),
             "duration_ms": outcome.duration_ms,
             "attempts": outcome.attempts,

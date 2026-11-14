@@ -33,6 +33,7 @@ MAX_RETRIES = _int("GEMINI_MAX_RETRIES", 2)                  # повторні 
 FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite").strip() or None
 PRIMARY_BUDGET_S = _int("GEMINI_PRIMARY_BUDGET_SECONDS", 60)  # скільки чекати основну модель, якщо є резервна
 MODEL_COOLDOWN_S = _int("GEMINI_MODEL_COOLDOWN_SECONDS", 120)  # скільки не чіпати перевантажену модель
+DAILY_QUOTA_COOLDOWN_S = _int("GEMINI_DAILY_QUOTA_COOLDOWN_SECONDS", 1800)  # пауза після вичерпання денного ліміту
 ENABLE_PRO = _bool("ENABLE_PRO_MODEL", False)               # Pro немає на безкоштовному рівні
 
 # Ціни платного рівня (USD за 1 млн токенів), ai.google.dev/gemini-api/docs/pricing,

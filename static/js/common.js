@@ -39,6 +39,7 @@
     client_timeout: "Задовге очікування",
     timeout: "Задовге очікування",
     rate_limit: "Перевищено ліміт Gemini API",
+    daily_quota: "Вичерпано денний ліміт моделі",
     local_rate: "Забагато запитів",
     bad_file: "Неправильний файл",
     file_too_big: "Файл завеликий",

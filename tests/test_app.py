@@ -220,3 +220,37 @@ def test_publishable_key_falls_back_to_sqlite(monkeypatch, tmp_path):
     assert isinstance(storage_mod.make_storage(), storage_mod.SQLiteStorage)
     monkeypatch.setattr(config, "SUPABASE_KEY", "sb_secret_abc")
     assert isinstance(storage_mod.make_storage(), storage_mod.SupabaseStorage)
+
+
+def test_daily_quota_no_retry_and_fast_fail(monkeypatch):
+    """Денний ліміт: без повторів, перехід на резерв, а без резерву миттєва відповідь із кешу."""
+    from google.genai import errors
+    from reviewer import gemini_client as gc
+
+    calls = []
+    daily = {"error": {"code": 429, "message": "You exceeded your current quota", "status": "RESOURCE_EXHAUSTED",
+                       "details": [{"violations": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}]}}
+
+    class Resp:
+        parsed = None
+        text = '{"detected_language":"Python","score":80,"summary":"ok","strengths":[],"issues":[],"corrected_code":"x"}'
+        usage_metadata = type("U", (), {"prompt_token_count": 10, "candidates_token_count": 5, "thoughts_token_count": 0})()
+
+    class Models:
+        def generate_content(self, model, **kw):
+            calls.append(model)
+            if model == "gemini-3.8-flash":
+                raise errors.ClientError(429, daily)
+            return Resp()
+
+    monkeypatch.setattr(gc, "get_client", lambda: type("C", (), {"models": Models()})())
+    monkeypatch.setattr(gc.time, "sleep", lambda s: None)
+    gc._cooldown_until.clear()
+    assert gc._classify(errors.ClientError(429, daily)).code == "daily_quota"
+    out = gc.review_code("print(1)", "Python", "gemini-3.8-flash", fallback="gemini-3.5-flash-lite")
+    assert calls == ["gemini-3.8-flash", "gemini-3.5-flash-lite"] and out.fallback_from == "gemini-3.8-flash"
+    assert out.fallback_reason == "daily_quota"
+    calls.clear()
+    with pytest.raises(gc.ReviewError) as e:
+        gc.review_code("print(1)", "Python", "gemini-3.8-flash")
+    assert e.value.code == "daily_quota" and calls == []

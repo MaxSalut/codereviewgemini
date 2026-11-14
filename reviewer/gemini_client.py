@@ -65,6 +65,7 @@ class ReviewOutcome:
     thinking_tokens: int = 0
     cost_usd: float = 0.0
     fallback_from: str | None = None   # основна модель, замість якої відповіла резервна
+    fallback_reason: str | None = None  # код помилки основної моделі (unavailable, daily_quota, ...)
     extra: dict = field(default_factory=dict)
 
 
@@ -114,6 +115,10 @@ def _classify(exc: Exception) -> ReviewError:
     if isinstance(exc, errors.APIError):
         code = getattr(exc, "code", 0) or 0
         text = (str(getattr(exc, "message", "")) + " " + str(exc)).lower()
+        if code == 429 and "perday" in text:
+            return ReviewError("daily_quota", "Вичерпано денний ліміт безкоштовного рівня для цієї моделі. "
+                                              "Google оновлює ліміт щодня приблизно о 10:00 за Києвом. "
+                                              "Оберіть іншу модель.", 429)
         if code == 429 or "resource_exhausted" in text or "quota" in text:
             return ReviewError("rate_limit", "Перевищено ліміт безкоштовного рівня Gemini API. Зачекайте хвилину і спробуйте ще раз.", 429)
         if code in (401, 403) or "api_key_invalid" in text or "api key not valid" in text or "permission" in text:
@@ -165,9 +170,22 @@ def _parse(response) -> dict:
 
 
 # Перевантаження, які має сенс «обійти» резервною моделлю.
-_FALLBACK_CODES = {"unavailable", "timeout", "rate_limit", "empty"}
+_FALLBACK_CODES = {"unavailable", "timeout", "rate_limit", "daily_quota", "empty"}
 MIN_ATTEMPT_S = 15  # не починати спробу, якщо на неї лишилося менше часу
-_cooldown_until: dict[str, float] = {}  # модель -> до якого моменту вважаємо її перевантаженою
+# модель -> (до якого моменту не викликати її, помилка, через яку її відклали)
+_cooldown_until: dict[str, tuple[float, ReviewError]] = {}
+
+
+def _in_cooldown(model: str) -> ReviewError | None:
+    until, err = _cooldown_until.get(model, (0.0, None))
+    return err if until > time.monotonic() else None
+
+
+def _put_in_cooldown(model: str, err: ReviewError) -> None:
+    if err.code == "daily_quota":
+        _cooldown_until[model] = (time.monotonic() + config.DAILY_QUOTA_COOLDOWN_S, err)
+    elif err.code in {"unavailable", "timeout"}:
+        _cooldown_until[model] = (time.monotonic() + config.MODEL_COOLDOWN_S, err)
 
 
 def review_code(code: str, language_label: str, model: str | None = None,
@@ -178,9 +196,18 @@ def review_code(code: str, language_label: str, model: str | None = None,
         fallback = None
     started = time.perf_counter()
     if not fallback:
-        return _review_with_model(code, language_label, model, started, config.TOTAL_DEADLINE_S, config.MAX_RETRIES)
+        # Денний ліміт не оновиться за секунди: відповідаємо одразу, не витрачаючи запити.
+        err = _in_cooldown(model)
+        if err is not None and err.code == "daily_quota":
+            raise err
+        try:
+            return _review_with_model(code, language_label, model, started, config.TOTAL_DEADLINE_S, config.MAX_RETRIES)
+        except ReviewError as e:
+            _put_in_cooldown(model, e)
+            raise
 
-    if _cooldown_until.get(model, 0) > time.monotonic():
+    reason_err = _in_cooldown(model)
+    if reason_err is not None:
         log.info("Model %s is in cooldown, using fallback %s", model, fallback)
     else:
         try:
@@ -189,11 +216,12 @@ def review_code(code: str, language_label: str, model: str | None = None,
         except ReviewError as err:
             if err.code not in _FALLBACK_CODES:
                 raise
-            if err.code in {"unavailable", "timeout"}:
-                _cooldown_until[model] = time.monotonic() + config.MODEL_COOLDOWN_S
+            _put_in_cooldown(model, err)
+            reason_err = err
             log.warning("Model %s failed (%s), switching to fallback %s", model, err.code, fallback)
     outcome = _review_with_model(code, language_label, fallback, started, config.TOTAL_DEADLINE_S, 1)
     outcome.fallback_from = model
+    outcome.fallback_reason = reason_err.code
     return outcome
 
 
