@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Рецензент — перевірка коду{% endblock %}
+{% block content %}
+<div class="workspace">
+  <section class="panel panel--editor" aria-labelledby="editor-title">
+    <div class="panel__head">
+      <h1 id="editor-title" class="panel__title">Код на перевірку</h1>
+      <div class="field field--inline">
+        <label for="language">Мова</label>
+        <select id="language" class="select"></select>
+      </div>
+    </div>
+
+    <div class="editor" id="editor">
+      <div class="editor__gutter" id="gutter" aria-hidden="true"><span>1</span></div>
+      <textarea id="code" class="editor__input" spellcheck="false" autocomplete="off" autocapitalize="off"
+        aria-label="Код програми"
+        placeholder="Вставте сюди код лабораторної або перетягніть файл (.py, .cpp, .java, .js …)"></textarea>
+      <div class="editor__drop" id="drop" aria-hidden="true">
+        <div class="editor__drop-card">Відпустіть файл, щоб відкрити його</div>
+      </div>
+    </div>
+
+    <div class="editor__bar">
+      <div class="editor__actions">
+        <label class="btn btn--ghost btn--sm" for="file">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 13V3m0 0L6 7m4-4l4 4M4 13v3h12v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Відкрити файл
+        </label>
+        <input type="file" id="file" class="visually-hidden">
+        <button type="button" class="btn btn--ghost btn--sm" id="clear">Очистити</button>
+      </div>
+      <span class="editor__count" id="count">0 рядків</span>
+    </div>
+
+    <div class="examples">
+      <span class="examples__label">Приклади для демонстрації</span>
+      <div class="examples__list" id="examples"></div>
+    </div>
+
+    <div class="run">
+      <fieldset class="models">
+        <legend class="models__legend">Модель Gemini</legend>
+        <div class="segmented" id="models"></div>
+      </fieldset>
+      <label class="switch">
+        <input type="checkbox" id="compare">
+        <span class="switch__track" aria-hidden="true"></span>
+        <span>Порівняти дві моделі</span>
+      </label>
+      <button class="btn btn--primary btn--lg" id="submit">
+        <span class="btn__label">Перевірити код</span>
+        <kbd class="btn__kbd">Ctrl + Enter</kbd>
+      </button>
+    </div>
+  </section>
+
+  <section class="panel panel--result" id="result" aria-live="polite" aria-labelledby="result-title">
+    <h2 id="result-title" class="visually-hidden">Результат рев'ю</h2>
+    <div class="empty" id="empty">
+      <svg class="empty__art" viewBox="0 0 220 150" aria-hidden="true">
+        <rect x="18" y="12" width="150" height="126" rx="8" fill="var(--surface)" stroke="var(--line-strong)" stroke-width="2"/>
+        <g stroke="var(--line-strong)" stroke-width="5" stroke-linecap="round">
+          <path d="M40 38h70"/><path d="M52 56h88"/><path d="M52 74h56"/><path d="M40 92h80"/><path d="M52 110h64"/>
+        </g>
+        <path d="M30 74h0" stroke="var(--red)" stroke-width="7" stroke-linecap="round"/>
+        <path d="M30 56h0" stroke="var(--amber)" stroke-width="7" stroke-linecap="round"/>
+        <path d="M30 110h0" stroke="var(--teal)" stroke-width="7" stroke-linecap="round"/>
+        <ellipse cx="178" cy="44" rx="30" ry="24" fill="none" stroke="var(--red)" stroke-width="3" transform="rotate(-8 178 44)"/>
+        <text x="178" y="55" text-anchor="middle" font-family="Caveat, cursive" font-size="32" font-weight="700" fill="var(--red)">87</text>
+      </svg>
+      <h3 class="empty__title">Тут з'явиться рецензія</h3>
+      <ol class="empty__steps">
+        <li>Вставте код, відкрийте файл або оберіть приклад.</li>
+        <li>Перевірте мову і модель Gemini.</li>
+        <li>Натисніть «Перевірити код» — звіт буде за 5–20 секунд.</li>
+      </ol>
+    </div>
+    <div id="output" hidden></div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/app.js') }}"></script>{% endblock %}

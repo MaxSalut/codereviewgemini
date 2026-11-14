@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Рецензент — історія і статистика{% endblock %}
+{% block content %}
+<div class="history">
+  <div class="history__head">
+    <div>
+      <h1 class="page-title">Історія перевірок</h1>
+      <p class="page-lead" id="storage-note">Завантажую дані з бази…</p>
+    </div>
+    <button class="btn btn--ghost btn--sm" id="reload">Оновити</button>
+  </div>
+
+  <div id="history-error" hidden></div>
+
+  <section class="kpis" id="kpis" aria-label="Підсумки">
+    <div class="kpi"><span class="kpi__value" data-k="total">—</span><span class="kpi__label">перевірок</span></div>
+    <div class="kpi"><span class="kpi__value" data-k="avg_score">—</span><span class="kpi__label">середня оцінка</span></div>
+    <div class="kpi"><span class="kpi__value" data-k="total_issues">—</span><span class="kpi__label">знайдено зауважень</span></div>
+    <div class="kpi"><span class="kpi__value" data-k="avg_duration">—</span><span class="kpi__label">середній час відповіді</span></div>
+    <div class="kpi"><span class="kpi__value" data-k="avg_cost">—</span><span class="kpi__label">ціна запиту на платному рівні</span></div>
+  </section>
+
+  <section class="charts" aria-label="Графіки">
+    <figure class="chart">
+      <figcaption class="chart__title">Найчастіші типи зауважень</figcaption>
+      <div class="bars" id="chart-types"></div>
+    </figure>
+    <figure class="chart">
+      <figcaption class="chart__title">Оцінки останніх перевірок</figcaption>
+      <div class="line-chart" id="chart-scores"></div>
+    </figure>
+    <figure class="chart">
+      <figcaption class="chart__title">Мови програмування</figcaption>
+      <div class="bars" id="chart-langs"></div>
+    </figure>
+    <figure class="chart">
+      <figcaption class="chart__title">Моделі: час, ціна, оцінка</figcaption>
+      <div id="chart-models"></div>
+    </figure>
+  </section>
+
+  <section class="table-wrap" aria-labelledby="list-title">
+    <h2 id="list-title" class="section-title">Усі перевірки</h2>
+    <div id="table"></div>
+  </section>
+</div>
+
+<dialog class="modal" id="modal" aria-labelledby="modal-title">
+  <div class="modal__head">
+    <h2 class="modal__title" id="modal-title">Звіт</h2>
+    <button class="icon-btn" id="modal-close" aria-label="Закрити">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <div class="modal__body" id="modal-body"></div>
+</dialog>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/history.js') }}"></script>{% endblock %}

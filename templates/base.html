@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Рецензент{% endblock %}</title>
+  <meta name="description" content="Автоматичне рев'ю коду лабораторних робіт на основі Google Gemini API">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=JetBrains+Mono:wght@400;600&family=Manrope:wght@400;500;600;700&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="page-{{ page }}">
+  <a class="skip" href="#main">Перейти до вмісту</a>
+  <header class="topbar">
+    <div class="topbar__inner">
+      <a class="brand" href="/" aria-label="Рецензент — на головну">
+        <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="4" width="20" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M8 11h10M8 16h7M8 21h9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M21 19l3.2 3.4L30 15" fill="none" stroke="var(--red)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="brand__text">
+          <span class="brand__name">Рецензент</span>
+          <span class="brand__sub">рев'ю коду лабораторних на основі Google Gemini API</span>
+        </span>
+      </a>
+      <nav class="nav" aria-label="Розділи">
+        <a href="/" class="nav__link {% if page == 'review' %}is-active{% endif %}">Перевірка</a>
+        <a href="/history" class="nav__link {% if page == 'history' %}is-active{% endif %}">Історія</a>
+      </nav>
+      <div class="status" id="status" role="status" aria-live="polite">
+        <span class="status__dot"></span><span class="status__text">З'єднання…</span>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <span>Безверхий Максим, ТК-42 · ФКНК КНУ імені Тараса Шевченка · 2026</span>
+    <span>AIaaS: Google Gemini API · DBaaS: Supabase · PaaS: Render</span>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
