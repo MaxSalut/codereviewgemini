@@ -4,7 +4,7 @@
     python scripts/benchmark.py              # Flash і Flash-Lite, по 1 разу на приклад
     python scripts/benchmark.py --runs 3     # по 3 рази — середнє точніше
 Результати друкуються таблицею і зберігаються в benchmark_results.csv.
-Безкоштовний рівень має ліміт запитів за хвилину, тому між запитами є пауза.
+Безкоштовний рівень Flash дозволяє 5 запитів за хвилину і 20 на день, тому між запитами є пауза 13 с.
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--models", nargs="+", default=["gemini-3.8-flash", "gemini-3.5-flash-lite"])
     parser.add_argument("--runs", type=int, default=1)
-    parser.add_argument("--pause", type=float, default=7.0, help="пауза між запитами, с")
+    parser.add_argument("--pause", type=float, default=13.0, help="пауза між запитами, с (Flash: 5 запитів за хвилину)")
     parser.add_argument("--out", default="benchmark_results.csv", help="файл для результатів (CSV)")
     args = parser.parse_args()
 
